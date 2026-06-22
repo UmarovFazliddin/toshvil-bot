@@ -1,3 +1,4 @@
+import os
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -8,7 +9,7 @@ from telegram.ext import (
     filters,
 )
 
-TOKEN = "8610344867:AAE1EQj1XPVSnNbDcDMurMf6MLbvF-mcyUg"
+TOKEN = os.getenv("BOT_TOKEN")
 
 ADMINS = [
     1628119985,

@@ -8,7 +8,7 @@ from telegram.ext import (
     filters,
 )
 
-TOKEN = "TOKEN_BU_YERGA"
+TOKEN = "8610344867:AAF2iE9avasPQvupLyVaBnFG2FaRg7PTRII"
 
 ADMINS = [
     1628119985,

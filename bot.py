@@ -1,6 +1,5 @@
 import os
 import re
-from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -11,10 +10,7 @@ from telegram.ext import (
     filters,
 )
 
-# .env faylini yuklash
-load_dotenv()
-
-# Tokenni Render yoki lokal muhitdan olish
+# Render muhitida o'zgaruvchini to'g'ridan-to'g'ri o'qiydi (dotenv shart emas)
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 ADMINS = [
@@ -65,7 +61,6 @@ async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📎 Foto yoki fayl yuboring.\n\n"
         "Agar ilova qilmoqchi bo‘lmasangiz /skip yuboring."
     )
-
     return FILE
 
 
@@ -87,7 +82,7 @@ async def send_to_admins(update, context, attachment):
     
     user_id = update.effective_user.id
 
-    # Admin xabaridan foydalanuvchini aniqlash uchun matn oxiriga [User_ID: ...] kalitini qo'shamiz
+    # Yaxlit matn va reply vaqtida ID aniqlash qulay bo'lishi uchun maxsus kalit so'z
     text = (
         f"📨 YANGI MUROJAAT\n\n"
         f"🆔 {appeal_id}\n\n"
@@ -102,7 +97,7 @@ async def send_to_admins(update, context, attachment):
 
     for admin in ADMINS:
         try:
-            # Agar foydalanuvchi media yuborgan bo'lsa, bitta xabarda yuboramiz (caption yordamida)
+            # Agar foydalanuvchi media yuborgan bo'lsa, bitta xabarda jo'natiladi (matn caption qismida ketadi)
             if attachment:
                 if attachment.photo:
                     await context.bot.send_photo(
@@ -121,7 +116,7 @@ async def send_to_admins(update, context, attachment):
                 else:
                     await context.bot.send_message(chat_id=admin, text=text, parse_mode="HTML")
             else:
-                # Agar fayl bo'lmasa, faqat matn o'zi ketadi
+                # Agar /skip bosilgan bo'lsa, faqat matn o'zi ketadi
                 await context.bot.send_message(chat_id=admin, text=text, parse_mode="HTML")
 
         except Exception as e:
@@ -151,7 +146,7 @@ async def admin_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     user_id = None
     
-    # Kelgan xabarning matnidan (text) yoki media ostidagi izohidan (caption) Regex orqali ID raqamini qidiramiz
+    # Kelgan xabar matnidan yoki rasm/fayl izohidan (caption) Regex orqali ID raqamini qidiradi
     target_text = reply_to.text or reply_to.caption
     if target_text:
         match = re.search(r"\[User_ID:\s*(\d+)\]", target_text)
@@ -164,14 +159,14 @@ async def admin_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             await context.bot.send_message(chat_id=user_id, text=reply_text, parse_mode="HTML")
             await update.message.reply_text("✅ Javobingiz foydalanuvchiga muvaffaqiyatli yetkazildi!")
         except Exception as e:
-            await update.message.reply_text(f"❌ Javobni yuborishda xatolik: {e}")
+            await update.message.reply_text(f"❌ Javobni yuborishda xatolik (Foydalanuvchi botni bloklagan bo'lishi mumkin): {e}")
     else:
-        await update.message.reply_text("⚠️ Xatolik: Foydalanuvchi ID-si aniqlanmadi. Iltimos, faqat bot yuborgan asosiy xabarga 'Reply' qiling.")
+        await update.message.reply_text("⚠️ Xatolik: Foydalanuvchi ID-si aniqlanmadi. Faqat bot yuborgan murojaat xabariga 'Reply' qiling.")
 
 
 def main():
     if not TOKEN:
-        print("❌ Xatolik: TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi topilmadi!")
+        print("❌ Xatolik: TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi aniqlanmadi!")
         return
 
     app = Application.builder().token(TOKEN).build()
@@ -196,7 +191,6 @@ def main():
                 CommandHandler("start", start),
             ],
             FILE: [
-                # filters.ALL qildik, har qanday holatda keyingi bosqichga o'tishi uchun
                 MessageHandler(filters.ALL & ~filters.COMMAND, get_file),
                 CommandHandler("skip", skip_file),
                 CommandHandler("start", start),

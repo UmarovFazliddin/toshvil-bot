@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 
 # DIQQAT: Tokenni xavfsizlik yuzasidan yashirin saqlang!
-TOKEN = "8849386246:AAEKJWj9uKJMI3PdkOTookVGZrcLGudClkw"
+TOKEN = "8849386246:AAHhudnY2PEOYVIOOmDqAXwLdkqgEETuUbo"
 
 ADMINS = [
     1628119985,

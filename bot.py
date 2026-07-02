@@ -1,4 +1,5 @@
 import os
+import re
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -9,8 +10,8 @@ from telegram.ext import (
     filters,
 )
 
-# DIQQAT: Tokenni xavfsizlik yuzasidan yashirin saqlang!
-TOKEN = "8849386246:AAHhudnY2PEOYVIOOmDqAXwLdkqgEETuUbo"
+# DIQQAT: Tokenni har safar GitHub'ga yuklashdan oldin o'chirib qo'ying!
+TOKEN = "8849386246:AAEKJWj9uKJMI3PdkOTookVGZrcLGudClkw"
 
 ADMINS = [
     1628119985,
@@ -20,7 +21,7 @@ ADMINS = [
 
 FIO, PHONE, DISTRICT, TEXT, FILE = range(5)
 
-counter = 1  # Server o'chsa 1 ga qaytadi. Real loyihada ma'lumotlar bazasiga ulang!
+counter = 1
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -56,22 +57,14 @@ async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return FILE
 
 async def skip_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_to_admins(update, context, attachment_type=None)
+    await send_to_admins(update, context, msg_with_file=None)
     return ConversationHandler.END
 
 async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Rasm yoki Hujjat kelganini aniqlaymiz
-    if update.message.photo:
-        await send_to_admins(update, context, attachment_type="photo")
-    elif update.message.document:
-        await send_to_admins(update, context, attachment_type="document")
-    else:
-        await update.message.reply_text("⚠️ Iltimos, faqat foto, fayl yuboring yoki /skip bosing.")
-        return FILE
-        
+    await send_to_admins(update, context, msg_with_file=update.message)
     return ConversationHandler.END
 
-async def send_to_admins(update: Update, context: ContextTypes.DEFAULT_TYPE, attachment_type=None):
+async def send_to_admins(update: Update, context: ContextTypes.DEFAULT_TYPE, msg_with_file=None):
     global counter
 
     appeal_id = f"2026-{counter:04d}"
@@ -79,7 +72,7 @@ async def send_to_admins(update: Update, context: ContextTypes.DEFAULT_TYPE, att
     
     user_id = update.effective_user.id
 
-    # Admin ko'radigan asosiy matn şabloni
+    # ID aniqlash oson bo'lishi uchun xabar oxiriga aniq qilib yozib qo'yamiz
     text = (
         f"📨 YANGI MUROJAAT\n\n"
         f"🆔 {appeal_id}\n\n"
@@ -87,30 +80,31 @@ async def send_to_admins(update: Update, context: ContextTypes.DEFAULT_TYPE, att
         f"📞 Telefon: {context.user_data['phone']}\n"
         f"📍 Hudud: {context.user_data['district']}\n\n"
         f"📝 Murojaat:\n"
-        f"{context.user_data['text']}\n"
-        f"<a href='tg://user?id={user_id}'>&#8203;</a>"  # Ko'rinmas havola doim matn ichida bo'ladi
+        f"{context.user_data['text']}\n\n"
+        f"👤 Foydalanuvchi: <a href='tg://user?id={user_id}'>Profilga o'tish</a>\n"
+        f"🔑 [User_ID: {user_id}]"  # Regex orqali kafolatlangan qidiruv uchun
     )
 
     for admin in ADMINS:
         try:
-            if attachment_type == "photo":
-                # Rasmni tagiga matnni yopishtirib yuboramiz, shunda reply qilish oson bo'ladi
-                await context.bot.send_photo(
-                    chat_id=admin,
-                    photo=update.message.photo[-1].file_id,
-                    caption=text,
-                    parse_mode="HTML"
-                )
-            elif attachment_type == "document":
-                # Hujjat tagiga matnni yopishtirib yuboramiz
-                await context.bot.send_document(
-                    chat_id=admin,
-                    document=update.message.document.file_id,
-                    caption=text,
-                    parse_mode="HTML"
-                )
+            if msg_with_file:
+                if msg_with_file.photo:
+                    await context.bot.send_photo(
+                        chat_id=admin,
+                        photo=msg_with_file.photo[-1].file_id,
+                        caption=text,
+                        parse_mode="HTML"
+                    )
+                elif msg_with_file.document:
+                    await context.bot.send_document(
+                        chat_id=admin,
+                        document=msg_with_file.document.file_id,
+                        caption=text,
+                        parse_mode="HTML"
+                    )
+                else:
+                    await context.bot.send_message(chat_id=admin, text=text, parse_mode="HTML")
             else:
-                # Agar fayl bo'lmasa, faqat matnning o'zi ketadi
                 await context.bot.send_message(chat_id=admin, text=text, parse_mode="HTML")
         except Exception as e:
             print(f"Adminga yuborishda xatolik ({admin}): {e}")
@@ -128,6 +122,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def admin_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Faqat adminlar javob yoza olishini tekshirish
     if update.effective_user.id not in ADMINS:
         return
 
@@ -137,15 +132,23 @@ async def admin_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     user_id = None
     
-    # Matnli xabardan yoki media xabarning caption (izoh) qismidan havolani qidiramiz
-    entities = reply_to.entities or reply_to.caption_entities
-    
-    if entities:
-        for entity in entities:
-            if entity.type == "text_link" and entity.url.startswith("tg://user?id="):
-                user_id = int(entity.url.split("id=")[1])
-                break
+    # 1-usul: Xabar matni yoki izoh (caption) ichidan [User_ID: 12345] ni matn qidirish (Regex) orqali topish
+    target_text = reply_to.text or reply_to.caption
+    if target_text:
+        match = re.search(r"\[User_ID:\s*(\d+)\]", target_text)
+        if match:
+            user_id = int(match.group(1))
 
+    # 2-usul: Agar matndan topilmasa, havola (link) entity'laridan qidirish (Zaxira usul)
+    if not user_id:
+        entities = reply_to.entities or reply_to.caption_entities
+        if entities:
+            for entity in entities:
+                if entity.type == "text_link" and entity.url.startswith("tg://user?id="):
+                    user_id = int(entity.url.split("id=")[1])
+                    break
+
+    # Agar foydalanuvchi aniqlangan bo'lsa, unga javobni yuboramiz
     if user_id:
         try:
             reply_text = f"🔔 <b>Murojaatingizga javob xati keldi:</b>\n\n{update.message.text}"
@@ -154,7 +157,10 @@ async def admin_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             await update.message.reply_text(f"❌ Javobni yuborishda xatolik (Foydalanuvchi botni bloklagan bo'lishi mumkin): {e}")
     else:
-        await update.message.reply_text("⚠️ Xatolik: Foydalanuvchi ID-si aniqlanmadi. Iltimos, ma'lumotlar mavjud bo'lgan asosiy xabarga 'Reply' qiling.")
+        await update.message.reply_text(
+            "⚠️ Xatolik: Foydalanuvchi ID-si aniqlanmadi!\n"
+            "Iltimos, faqat bot yuborgan asosiy ma'lumotlar xabariga (yoki rasmga) 'Reply' qilib javob yozing."
+        )
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -179,7 +185,7 @@ def main():
                 CommandHandler("start", start),
             ],
             FILE: [
-                MessageHandler(filters.PHOTO | filters.Document.ALL, get_file),
+                MessageHandler(filters.ALL & ~filters.COMMAND, get_file),
                 CommandHandler("skip", skip_file),
                 CommandHandler("start", start),
             ],
@@ -192,6 +198,8 @@ def main():
     )
 
     app.add_handler(conv)
+    
+    # Admin xabarlarini tutuvchi handler har doim ConversationHandler'dan pastda bo'lishi shart
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, admin_reply_handler))
 
     print("✅ Bot muvaffaqiyatli ishga tushdi...")
